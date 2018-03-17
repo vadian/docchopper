@@ -33,12 +33,25 @@ class TestStringMethods(unittest.TestCase):
         chop = Chopper(self.pdf_bytes)
         count = 0
 
-        for page in chop.images():
+        for image in chop.images():
             count += 1
-            self.assertEqual(str(type(page)), '<class \'PNGImage\'>',
-                             'ERROR: ' + str(type(page)) + ' not PNGImage')
+            self.assertEqual(str(type(image)), '<class \'bytes\'>',
+                             'ERROR: ' + str(type(image)) + ' not bytes')
+            self.assertGreater(len(image), 0, 'ERROR: Empty Byte String')
 
         self.assertGreater(count, 0, 'ERROR: No images returned by iterator')
+
+    local = False
+
+    def test_display(self):
+        if not self.local:
+            return
+
+        count = 0
+        for image in Chopper(self.pdf_bytes).images():
+            with open('C:\\tmp\\'+str(count)+'.png', 'wb') as file:
+                file.write(image)
+            count += 1
 
 
 if __name__ == '__main__':

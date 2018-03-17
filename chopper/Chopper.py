@@ -1,10 +1,7 @@
 import PyPDF2
 import io
-
-
-def bin_to_iter(binary):
-    for byte in binary:
-        yield byte
+from wand.image import Image
+from wand.image import Color
 
 
 class Chopper(object):
@@ -26,9 +23,39 @@ class Chopper(object):
             yield new_pdf
 
     def images(self):
+        count = 0
         for page in self.pages():
             # convert to image
+            bytes_out = self._convert(page, count)
+            count += 1
             # yield image
-            pass
+            yield bytes_out
 
-#    def _convert(self):
+    count = 0
+
+    @staticmethod
+    def _convert(page, count):
+        bytes_in = io.BytesIO()
+
+        page.write(bytes_in)
+        bytes_in.seek(0)
+
+        img = Image(file=bytes_in, format='pdf', resolution=300)
+
+        with open('C:\\tmp\\'+str(count)+'.pdf', 'wb') as outfile:
+            img.save(file=outfile)
+
+        print('Height:' + str(img.height) + ' Width: ' + str(img.width))
+        print('Format: ' + img.format)
+        print('BG Color: ' + img.background_color.string)
+
+        img.format = 'png'
+        img.background_color = Color("white")
+        img.alpha_channel = 'remove'
+        with open('C:\\tmp\\'+str(count)+'.png', 'wb') as outfile:
+            img.save(file=outfile)
+
+        print('Height:' + str(img.height) + ' Width: ' + str(img.width))
+        print('Format: ' + img.format)
+        print('BG Color: ' + img.background_color.string)
+        return img.make_blob('png')

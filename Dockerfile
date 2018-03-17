@@ -9,7 +9,10 @@ ADD ./chopper /app/chopper
 ADD ./*.txt /app/
 ADD ./*.py /app/
 
-# Install ImageMagick (uncomment for the fun)
+# Install GhostScript (with applicable licensing)
+
+# Install ImageMagick (uncomment for the fun) NOT version 7, also need dev headers
+# Check licensing of ImageMagick
 #RUN apt-get update && apt-get install -y \
 #  imagemagick
 
