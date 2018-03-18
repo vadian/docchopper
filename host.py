@@ -9,6 +9,7 @@ app = Flask(__name__)
 
 BASE_URL = 'http://localhost'
 
+
 @app.route("/")
 def hello():
     return 'Hello there'
@@ -19,7 +20,7 @@ def post_pdf():
     """
     This method accepts a binary PDF file and attempts to save it.
     If the file already exists, this method will error.  Uniqueness is
-    determined by....
+    determined by a sha224 hash of the file.
     todo: fill this in
     :return: JSON-encoded dict of URIs keyed by page number
     """
@@ -27,7 +28,7 @@ def post_pdf():
     pdfbytes = request.get_data()
     doc = Chopper('', pdfbytes)
     print('Made doc')
-    if storey.has_prefix(doc.get_file_key()):
+    if storey.contains_prefix(doc.get_file_key()):
         print('Key conflict')
         return 'Error!'
     print('Saving')
@@ -39,16 +40,16 @@ def put_pdf():
     """
     This method accepts a binary PDF file and attempts to save it.
     If the file exists, all pages of the existing file will be deleted
-    and new files will be generated.  Uniqueness is determined by...
-    todo: same, fill this in
+    and new files will be generated.  Uniqueness is
+    determined by a sha224 hash of the file.
     :return: JSON-encoded dict of URIs keyed by page number
     """
     print("Entering")
     pdfbytes = request.get_data()  # bytes class
     doc = Chopper('', pdfbytes)
-    conflicts = storey.list_objects(doc.get_file_key())
+    conflicts = storey.list_by_prefix(doc.get_file_key())
     if len(conflicts) > 0:
-        success = storey.delete_all(conflicts)
+        success = storey.delete_many(conflicts)
         if not success:
             #todo - should we perhaps silently let this go 'cause concurrency?
             print('Error!  Could not delete duplicates.')
@@ -61,11 +62,10 @@ def put_pdf():
 def get_pdf(image):
     print(image)
 
-    if not storey.contains_key(image):
+    if not storey.contains_prefix(image):
         return 'ERROR! No key! Looked for: ' + image
 
     return storey.get(image)
-
 
 
 def save(chop):
