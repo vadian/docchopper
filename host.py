@@ -1,21 +1,38 @@
+import io
 import json
+from concurrent import futures
+from time import time
 from flask import Flask
 from flask import request
 from flask import Response
 from chopper import Chopper
 from storeybook import Storey
-from xml.etree import ElementTree
+
 
 app = Flask(__name__)
 
+'''
+Base configuration:
+BASE_URL = host before routing
+PORT = 4000
+ENCODER = Support REST and SOAP with 'json' or 'xml'.  Currently, json implemented.
+SAFE_MODE = Controls parallel processing and whether to ignore signs of concurrent data store access
+MAX_WORKERS = Max number of worker threads if SAFE_MODE is False
+'''
 BASE_URL = 'http://localhost'
 PORT = 4000
-ENCODER = 'json'  # 'json' or 'xml', json only at the moment
+ENCODER = 'json'
+SAFE_MODE = True
+MAX_WORKERS = 8
 
 
 @app.route("/")
 def hello():
-    return 'Hello there'
+    """
+    Generic Hello, World! method.  This should always return and do so safely.
+    :return:
+    """
+    return build_response('Hello there', 200)
 
 
 @app.route("/docrepo", methods=['POST'])
@@ -26,10 +43,9 @@ def post_pdf():
     determined by a sha224 hash of the file, including metadata with modified timestamp
     :return: JSON-encoded dict of URIs keyed by page number
     """
-    print('Entering')
+    print('Entering post_pdf')
     pdfbytes = request.get_data()
     doc = Chopper(pdfbytes)
-    print('Made doc')
     if storey.contains_prefix(doc.get_file_key()):
         print('Key conflict')
         return build_response('Error!  Document already exists.', 400)
@@ -46,14 +62,13 @@ def put_pdf():
     hash of the file, including metadata with modified timestamp.
     :return: JSON-encoded dict of URIs keyed by page number
     """
-    print("Entering")
+    print("Entering put_pdf")
     pdfbytes = request.get_data()  # bytes class
     doc = Chopper(pdfbytes)
     conflicts = storey.list_by_prefix(doc.get_file_key())
     if len(conflicts) > 0:
         success = storey.delete_many(conflicts)
-        if not success:
-            # todo - should we perhaps silently let this go 'cause concurrency?
+        if not success and SAFE_MODE:
             print('Error!  Could not delete duplicates.')
             return build_response('Error!  Could not delete duplicates.', 400)
 
@@ -62,36 +77,106 @@ def put_pdf():
 
 @app.route("/docrepo/<image>", methods=['GET'])
 def get_pdf_page(image):
+    """
+    Returns a requested image from storage.
+    :param image: the file name of the image requested
+    :return: Image (status 200) on success, encoded error (status 404) for other
+    """
     print(image)
-
-    if not storey.contains_prefix(image):
-        return build_response('ERROR! No key! Looked for: ' + image, 404)
-
-    return build_response(storey.get(image), 200)
+    try:
+        return build_response(storey.get(image), 200)
+    except:
+        return build_response('ERROR! No image found for given key. Looked for: ' + image, 404)
 
 
 def save(chop):
-    print('Entering save')
-    doc_key = chop.get_file_key()
-    page = 0
-    page_urls = list()
-    print('Chopping...')
-    for image in chop.images(300):
-        page += 1
-        page_key = doc_key + '-' + str(page) + '.png'
-        print('Chopped one.')
-        storey.save(page_key, image)
-        print('Saved')
-        page_urls.append(BASE_URL + ':' + str(PORT) + '/docrepo/' + page_key)
+    """
+    Simple method that determines whether to render and save using concurrency.  This theoretically
+    achieves parallelism through external C rendering, though this is reliant on proper implementations in
+    modules used.  This method is also an injection point for runtime optimization metrics.
+    :param chop: An incoming PDF file represented in a Chopper class
+    :return: Dictionary with keys representing page numbers and values representing URLs for future access
+    """
+    function = None
+    if SAFE_MODE:
+        function = save_linear
+    else:
+        function = save_async
+    start = time()
+    retval = function(chop)
+    end = time()
+    print("Timedelta: " + str(end - start))
+    return retval
+
+
+def save_linear(chop):
+    """
+    Consecutively generates 300-DPI images for each page and stores them in the data store.
+    :param chop: PDF represented by Chopper class
+    :return: Dictionary with keys representing page numbers and values representing URLs for future access
+    """
+    page_keys = chop.get_page_keys()
+    for num, image in enumerate(chop.images(300)):
+        storey.save(page_keys[num], image)
+        print('Saved linearly: ' + page_keys[num])
+    page_urls = [key_to_url(page_key) for page_key in page_keys]
     print('Final list:' + str(page_urls))
 
-    return {num+1: value for num, value in enumerate(page_urls)}
+    return {num + 1: value for num, value in enumerate(page_urls)}
+
+
+def save_async(chop):
+    """
+    Concurrently generated 300-DPI images for each page and stores them in the data store.
+    :param chop: PDF represented by Chopper class
+    :return: Dictionary with keys representing page numbers and values representing URLs for future access
+    """
+    page_keys = chop.get_page_keys()
+    # spin up threads
+    threadable = list()
+
+    for num, page in enumerate(chop.pages()):
+        bytes_in = io.BytesIO()
+        page.write(bytes_in)
+        bytes_in.seek(0)
+        print(bytes_in)
+        threadable.append((bytes_in, page_keys[num]))
+
+    print('Starting threads...')
+    workers = min(MAX_WORKERS, len(threadable))
+    with futures.ThreadPoolExecutor(workers) as pool:
+        pool.map(_save_async_worker, threadable)
+
+    page_urls = [key_to_url(page_key) for page_key in page_keys]
+    return {num + 1: value for num, value in enumerate(page_urls)}
+
+
+def _save_async_worker(obj):
+    """
+    Internal worker method for async image generation and storage
+    :param obj: Tuple(page,key) with page represented by bytes representation of PDF and key to store under
+    :return: None
+    """
+    page, key = obj
+    img = Chopper.convert_from_bytes(page, 300)
+    store = Storey()
+    store.save(key, img)
+    print('Stored image async: ' + key)
+    return
 
 
 def build_response(input_obj, status):
+    """
+    Helper method to generate the appropriate response data for a given request.
+    :param input_obj: string or other serializable type
+    :param status: int status code to return
+    :return: Response object representing the given inputs
+    """
     encoded = None
     encoder = None
-    print(type(input_obj))
+
+    if type(input_obj) is str:
+        input_obj = [input_obj, ]
 
     if type(input_obj) is bytes:
         encoded = input_obj
@@ -101,10 +186,19 @@ def build_response(input_obj, status):
         encoder = 'application/json'
     elif ENCODER == 'xml':
         # todo - xml output
-        pass
+        raise NotImplementedError
     return Response(encoded, status=status, mimetype=encoder)
+
+
+def key_to_url(key):
+    """
+    Helper method to generate URL from given key and known host information
+    :param key: string key for the object
+    :return: string URL for given object
+    """
+    return BASE_URL + ':' + str(PORT) + '/docrepo/' + key
 
 
 storey = Storey()
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=PORT, debug=True)
+    app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)

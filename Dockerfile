@@ -14,7 +14,9 @@ ADD ./*.py /app/
 # Install ImageMagick (uncomment for the fun) NOT version 7, also need dev headers
 # Check licensing of ImageMagick
 #RUN apt-get update && apt-get install -y \
-#  imagemagick
+#  imagemagick \
+#  libmagickwand-dev \
+#  ghostscript
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
