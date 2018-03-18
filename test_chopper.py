@@ -2,7 +2,7 @@ import unittest
 from chopper.Chopper import Chopper
 
 
-class TestStringMethods(unittest.TestCase):
+class TestPDFConversion(unittest.TestCase):
 
     def setUp(self):
         filename = 'C:\\Users\\n0082\\Documents\\deep learning cheat sheet.pdf'
