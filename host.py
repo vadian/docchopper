@@ -1,8 +1,6 @@
 from flask import Flask
 from flask import request
-from flask import make_response
-
-from chopper.Chopper import Chopper
+from chopper import Chopper
 from storeybook import Storey
 
 app = Flask(__name__)
@@ -20,13 +18,12 @@ def post_pdf():
     """
     This method accepts a binary PDF file and attempts to save it.
     If the file already exists, this method will error.  Uniqueness is
-    determined by a sha224 hash of the file.
-    todo: fill this in
+    determined by a sha224 hash of the file, including metadata with modified timestamp
     :return: JSON-encoded dict of URIs keyed by page number
     """
     print('Entering')
     pdfbytes = request.get_data()
-    doc = Chopper('', pdfbytes)
+    doc = Chopper(pdfbytes)
     print('Made doc')
     if storey.contains_prefix(doc.get_file_key()):
         print('Key conflict')
@@ -40,13 +37,13 @@ def put_pdf():
     """
     This method accepts a binary PDF file and attempts to save it.
     If the file exists, all pages of the existing file will be deleted
-    and new files will be generated.  Uniqueness is
-    determined by a sha224 hash of the file.
+    and new files will be generated.  Uniqueness is determined by a sha224
+    hash of the file, including metadata with modified timestamp.
     :return: JSON-encoded dict of URIs keyed by page number
     """
     print("Entering")
     pdfbytes = request.get_data()  # bytes class
-    doc = Chopper('', pdfbytes)
+    doc = Chopper(pdfbytes)
     conflicts = storey.list_by_prefix(doc.get_file_key())
     if len(conflicts) > 0:
         success = storey.delete_many(conflicts)

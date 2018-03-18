@@ -7,11 +7,17 @@ from wand.color import Color
 
 class Chopper(object):
 
-    def __init__(self, file_name, pdf_bytes):
-        self._file_name = file_name
+    def __init__(self, pdf_bytes):
         self._file = pdf_bytes
         self._binary_stream = io.BytesIO(self._file)
         self._pdf_file = PyPDF2.PdfFileReader(self._binary_stream)
+
+    def num_pages(self):
+        return self._pdf_file.getNumPages()
+
+    def get_page_keys(self):
+        file_key = self.get_file_key()
+        return [file_key + '-' + str(n+1) + '.png' for n in range(self.num_pages())]
 
     def pages(self):
 
@@ -33,14 +39,10 @@ class Chopper(object):
 
     def get_file_key(self):
         """
-        Returns a key for the file.  This is generated from a hash of the PDF info and is consistent
-        for a given PDF that has not been modified.
+        Returns a key for the file.  This is generated from a sha224 hash of the PDF file
         :return:
         """
-        info = self._pdf_file.getDocumentInfo()
-        x = self._file_name + ''.join(info.values())
-        x_bytes = bytes(x, 'UTF8')
-        return hashlib.sha224(x_bytes).hexdigest()
+        return hashlib.sha224(self._file).hexdigest()
 
     @staticmethod
     def _convert(page, resolution, count):
