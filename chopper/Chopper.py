@@ -1,20 +1,22 @@
 import PyPDF2
 import io
+import hashlib
 from wand.image import Image
 from wand.color import Color
 
 
 class Chopper(object):
 
-    def __init__(self, pdf_bytes):
+    def __init__(self, file_name, pdf_bytes):
+        self._file_name = file_name
         self._file = pdf_bytes
+        self._binary_stream = io.BytesIO(self._file)
+        self._pdf_file = PyPDF2.PdfFileReader(self._binary_stream)
 
     def pages(self):
-        binary_stream = io.BytesIO(self._file)
-        pdf_file = PyPDF2.PdfFileReader(binary_stream)
 
-        for pageNum in range(pdf_file.getNumPages()):
-            page = pdf_file.getPage(pageNum)
+        for pageNum in range(self._pdf_file.getNumPages()):
+            page = self._pdf_file.getPage(pageNum)
 
             new_pdf = PyPDF2.PdfFileWriter()
             new_pdf.addPage(page)
@@ -24,13 +26,21 @@ class Chopper(object):
     def images(self, resolution=300):
         count = 0
         for page in self.pages():
-
             bytes_out = self._convert(page, resolution, count)
             count += 1
 
             yield bytes_out
 
-    count = 0
+    def get_file_key(self):
+        """
+        Returns a key for the file.  This is generated from a hash of the PDF info and is consistent
+        for a given PDF that has not been modified.
+        :return:
+        """
+        info = self._pdf_file.getDocumentInfo()
+        x = self._file_name + ''.join(info.values())
+        x_bytes = bytes(x, 'UTF8')
+        return hashlib.sha224(x_bytes).hexdigest()
 
     @staticmethod
     def _convert(page, resolution, count):
