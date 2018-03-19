@@ -22,7 +22,7 @@ MAX_WORKERS = Max number of worker threads if SAFE_MODE is False
 BASE_URL = 'http://localhost'
 PORT = 4000
 ENCODER = 'json'
-SAFE_MODE = True
+SAFE_MODE = False
 MAX_WORKERS = 8
 
 
@@ -159,8 +159,7 @@ def _save_async_worker(obj):
     """
     page, key = obj
     img = Chopper.convert_from_bytes(page, 300)
-    store = Storey()
-    store.save(key, img)
+    storey.save(key, img)
     print('Stored image async: ' + key)
     return
 
@@ -200,5 +199,6 @@ def key_to_url(key):
 
 
 storey = Storey()
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)

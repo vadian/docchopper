@@ -1,5 +1,10 @@
 import boto3
 import io
+import time
+import threading
+from queue import Queue
+
+NUM_WORKER_THREADS = 8
 
 
 class Storey(object):
@@ -8,7 +13,8 @@ class Storey(object):
     AWS S3.  The purpose is to allow for easy future development of concurrency features,
     such as batch uploading, as well as provide a convenient caching layer.
     """
-    def __init__(self, bucket_name='storeytime'):
+
+    def __init__(self, use_queue=False, bucket_name='storeytime'):
         """
         Instantiates a new Storey
         :param bucket_name: string name of AWS S3 bucket to use
@@ -16,6 +22,14 @@ class Storey(object):
         self.s3 = boto3.resource('s3')
         self._bucket_name = bucket_name
         self._bucket = self.s3.Bucket(bucket_name)
+        self.use_queue = use_queue
+
+        if use_queue:
+            threads = []
+            for i in range(NUM_WORKER_THREADS):
+                t = threading.Thread(target=_upload_worker, args=(bucket_name,))
+                t.start()
+                threads.append(t)
 
     def save(self, key, binary_data):
         """
@@ -24,7 +38,7 @@ class Storey(object):
         :param binary_data: bytes object containing the data to store
         :return: None
         """
-        self._bucket.put_object(Key=key, Body=binary_data)
+        self.save_many({key: binary_data, })
 
     def save_many(self, input_dict):
         """
@@ -33,9 +47,12 @@ class Storey(object):
         representation of the data to store as bytes object
         :return:
         """
-        #todo - concurrency
+
         for key, value in input_dict.items():
-            self._bucket.put_object(Key=key, Body=value)
+            if self.use_queue:
+                q.put((key, value,))
+            else:
+                self._bucket.put_object(Key=key, Body=value)
 
     def get(self, key):
         """
@@ -103,3 +120,21 @@ class Storey(object):
         :return: List of strings representing the bucket names
         """
         return list(bucket.name for bucket in self.s3.buckets.all())
+
+
+q = Queue()
+
+
+def _upload_worker(bucket_name):
+    bucket = boto3.resource('s3').Bucket(bucket_name)
+
+    while True:
+        item = q.get()
+        if item is None:
+            time.sleep(1000)
+            print('Nothing to upload.')
+            continue
+        print('Saving:' + str(item[0]))
+        bucket.put_object(Key=item[0], Body=item[1])
+        q.task_done()
+
