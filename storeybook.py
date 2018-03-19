@@ -4,7 +4,7 @@ import time
 import threading
 from queue import Queue
 
-NUM_WORKER_THREADS = 8
+NUM_WORKER_THREADS = 4
 
 
 class Storey(object):
@@ -51,7 +51,7 @@ class Storey(object):
 
         for key, value in input_dict.items():
             if self.use_queue:
-                q.put((key, value,))
+                to_upload.put((key, value,))
             else:
                 self._bucket.put_object(Key=key, Body=value)
 
@@ -123,19 +123,25 @@ class Storey(object):
         return list(bucket.name for bucket in self.s3.buckets.all())
 
 
-q = Queue()
+to_upload = Queue()
 
 
 def _upload_worker(bucket_name):
+    """
+    When in queue mode, this internal worker method polls the queue for submissions to upload,
+    and uploads them.
+    :param bucket_name:
+    :return:
+    """
     bucket = boto3.resource('s3').Bucket(bucket_name)
 
     while True:
-        item = q.get()
+        item = to_upload.get()
         if item is None:
             time.sleep(1000)
             print('Nothing to upload.')
             continue
         print('Saving:' + str(item[0]))
         bucket.put_object(Key=item[0], Body=item[1])
-        q.task_done()
+        to_upload.task_done()
 

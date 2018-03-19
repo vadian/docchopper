@@ -203,7 +203,7 @@ def _process_page():
         to_process.task_done()
 
 
-storey = Storey()
+storey = Storey(use_queue=not SAFE_MODE)
 to_process = None
 threads = []
 
