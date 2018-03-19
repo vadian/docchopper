@@ -8,6 +8,7 @@ from wand.color import Color
 class Chopper(object):
     """
     This class represents a PDF file in memory, and exposes methods to extract pages and convert them to PNGs.
+    This class can be thought of as a kitchen slicer, initialized with a PDF.
     """
     def __init__(self, pdf_bytes):
         """

@@ -156,6 +156,7 @@ def build_response(input_obj, status):
     encoded = None
     encoder = None
 
+    # Guarantee well-formed JSON
     if type(input_obj) is str:
         input_obj = [input_obj, ]
 

@@ -12,6 +12,7 @@ class Storey(object):
     This class serves to represent an abstraction layer between the front-end and
     AWS S3.  The purpose is to allow for easy future development of concurrency features,
     such as batch uploading, as well as provide a convenient caching layer.
+    Apologies for the terrible pun.
     """
 
     def __init__(self, use_queue=False, bucket_name='storeytime'):
