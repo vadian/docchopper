@@ -1,7 +1,9 @@
 import io
 import json
-from concurrent import futures
+import time
+import threading
 from time import time
+from queue import Queue
 from flask import Flask
 from flask import request
 from flask import Response
@@ -97,15 +99,15 @@ def save(chop):
     :param chop: An incoming PDF file represented in a Chopper class
     :return: Dictionary with keys representing page numbers and values representing URLs for future access
     """
-    function = None
+    func = None
     if SAFE_MODE:
-        function = save_linear
+        func = save_linear
     else:
-        function = save_async
-    start = time()
-    retval = function(chop)
-    end = time()
-    print("Timedelta: " + str(end - start))
+        func = save_async
+    # start = time()
+    retval = func(chop)
+    # end = time()
+    # print("Timedelta: " + str(end - start))
     return retval
 
 
@@ -132,36 +134,16 @@ def save_async(chop):
     :return: Dictionary with keys representing page numbers and values representing URLs for future access
     """
     page_keys = chop.get_page_keys()
-    # spin up threads
-    threadable = list()
-
     for num, page in enumerate(chop.pages()):
         bytes_in = io.BytesIO()
         page.write(bytes_in)
         bytes_in.seek(0)
-        print(bytes_in)
-        threadable.append((bytes_in, page_keys[num]))
+        to_process.put((bytes_in, page_keys[num],))
 
-    print('Starting threads...')
-    workers = min(MAX_WORKERS, len(threadable))
-    with futures.ThreadPoolExecutor(workers) as pool:
-        pool.map(_save_async_worker, threadable)
+    print('Added all to process queue...')
 
     page_urls = [key_to_url(page_key) for page_key in page_keys]
     return {num + 1: value for num, value in enumerate(page_urls)}
-
-
-def _save_async_worker(obj):
-    """
-    Internal worker method for async image generation and storage
-    :param obj: Tuple(page,key) with page represented by bytes representation of PDF and key to store under
-    :return: None
-    """
-    page, key = obj
-    img = Chopper.convert_from_bytes(page, 300)
-    storey.save(key, img)
-    print('Stored image async: ' + key)
-    return
 
 
 def build_response(input_obj, status):
@@ -198,7 +180,38 @@ def key_to_url(key):
     return BASE_URL + ':' + str(PORT) + '/docrepo/' + key
 
 
+def _process_page():
+    """
+    Internal worker method for async image generation and storage.  Polls the to_process Queue for (page,key)
+    tuples to process into images and store using Storey object.
+    :return: None
+    """
+    while True:
+        item = to_process.get()
+        if item is None:
+            time.sleep(1000)
+            print('Nothing to upload.')
+            continue
+        page, key = item
+
+        img = Chopper.convert_from_bytes(page, 300)
+        print('Processed image async: ' + key)
+        storey.save(key, img)
+        print('Saved image async:' + key)
+
+        to_process.task_done()
+
+
 storey = Storey()
+to_process = None
+threads = []
+
+if not SAFE_MODE:
+    to_process = Queue()
+    for i in range(MAX_WORKERS):
+        t = threading.Thread(target=_process_page,)
+        t.start()
+        threads.append(t)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)
