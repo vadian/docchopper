@@ -5,7 +5,7 @@ from chopper import Chopper
 class TestPDFConversion(unittest.TestCase):
 
     def setUp(self):
-        self.filename = 'C:\\Users\\n0082\\Documents\\deep learning cheat sheet.pdf'
+        self.filename = 'test.pdf'
 
         with open(self.filename, 'rb') as file:
             self.pdf_bytes = file.read()

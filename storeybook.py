@@ -1,8 +1,8 @@
-import boto3
 import io
 import time
 import threading
 from queue import Queue
+import boto3
 
 NUM_WORKER_THREADS = 4
 

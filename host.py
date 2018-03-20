@@ -22,10 +22,11 @@ SAFE_MODE = Controls parallel processing and whether to ignore signs of concurre
 MAX_WORKERS = Max number of worker threads if SAFE_MODE is False
 '''
 BASE_URL = 'http://localhost'
-PORT = 4000
+PORT = 80
 ENCODER = 'json'
 SAFE_MODE = False
 MAX_WORKERS = 8
+DEBUG = True
 
 
 @app.route("/")
@@ -50,9 +51,9 @@ def post_pdf():
     doc = Chopper(pdfbytes)
     if storey.contains_prefix(doc.get_file_key()):
         print('Key conflict')
-        return build_response('Error!  Document already exists.', 400)
+        return build_response('Error!  Document already exists.', 409)
     print('Saving')
-    return build_response(save(doc), 200)
+    return build_response(*save(doc))
 
 
 @app.route("/docrepo", methods=['PUT'])
@@ -72,9 +73,9 @@ def put_pdf():
         success = storey.delete_many(conflicts)
         if not success and SAFE_MODE:
             print('Error!  Could not delete duplicates.')
-            return build_response('Error!  Could not delete duplicates.', 400)
+            return build_response('Error!  Could not delete duplicates.', 500)
 
-    return build_response(save(doc), 200)
+    return build_response(*save(doc))
 
 
 @app.route("/docrepo/<image>", methods=['GET'])
@@ -99,7 +100,6 @@ def save(chop):
     :param chop: An incoming PDF file represented in a Chopper class
     :return: Dictionary with keys representing page numbers and values representing URLs for future access
     """
-    func = None
     if SAFE_MODE:
         func = save_linear
     else:
@@ -124,7 +124,7 @@ def save_linear(chop):
     page_urls = [key_to_url(page_key) for page_key in page_keys]
     print('Final list:' + str(page_urls))
 
-    return {num + 1: value for num, value in enumerate(page_urls)}
+    return {num + 1: value for num, value in enumerate(page_urls)}, 201
 
 
 def save_async(chop):
@@ -143,7 +143,7 @@ def save_async(chop):
     print('Added all to process queue...')
 
     page_urls = [key_to_url(page_key) for page_key in page_keys]
-    return {num + 1: value for num, value in enumerate(page_urls)}
+    return {num + 1: value for num, value in enumerate(page_urls)}, 202
 
 
 def build_response(input_obj, status):
@@ -166,8 +166,8 @@ def build_response(input_obj, status):
     elif ENCODER == 'json':
         encoded = json.dumps(input_obj)
         encoder = 'application/json'
-    elif ENCODER == 'xml':
-        # todo - xml output
+    else:
+        # todo - xml or unrecognized output format requested
         raise NotImplementedError
     return Response(encoded, status=status, mimetype=encoder)
 
@@ -215,4 +215,4 @@ if not SAFE_MODE:
         threads.append(t)
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=PORT, debug=DEBUG, threaded=True)

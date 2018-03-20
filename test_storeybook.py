@@ -3,7 +3,7 @@ from storeybook import Storey
 
 
 class TestStoreAndRetrieval(unittest.TestCase):
-    FILE = 'C:\\Users\\n0082\\Documents\\deep learning cheat sheet.pdf'
+    FILE = 'test.pdf'
     KEY = '12345679.pdf'
 
     def setUp(self):

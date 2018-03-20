@@ -1,6 +1,6 @@
-import PyPDF2
 import io
 import hashlib
+import PyPDF2
 from wand.image import Image
 from wand.color import Color
 
